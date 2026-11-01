@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="ja">
 <head>
@@ -17,13 +16,12 @@
         <p class="subtitle">周囲 5 × 5 マスから、爆弾を見つけ出そう。</p>
       </div>
       <div class="top-actions">
-        <button id="help-button" class="icon-button" type="button"
-          aria-label="遊び方" title="操作方法を表示">?</button>
+        <button id="help-button" class="icon-button" type="button" aria-label="遊び方" title="操作方法を表示">?</button>
         <button id="menu-button" class="ghost-button" type="button">難易度選択</button>
       </div>
     </header>
 
-    <nav class="tab-menu">
+    <nav class="tab-menu" aria-label="ページ切り替え">
       <button class="tab-button active" data-tab="game" type="button">ゲーム</button>
       <button class="tab-button" data-tab="rules" type="button">ルール説明</button>
     </nav>
@@ -38,19 +36,19 @@
         <button class="difficulty-card" data-difficulty="beginner" type="button">
           <span class="difficulty-name">初級</span>
           <strong>10 × 10</strong>
-          <span>爆弾 7 個</span>
+          <span>爆弾 <span data-bomb-count="beginner">7</span> 個</span>
           <small>マスサイズ 50px</small>
         </button>
         <button class="difficulty-card" data-difficulty="intermediate" type="button">
           <span class="difficulty-name">中級</span>
           <strong>16 × 30</strong>
-          <span>爆弾 35 個</span>
+          <span>爆弾 <span data-bomb-count="intermediate">35</span> 個</span>
           <small>マスサイズ 30px</small>
         </button>
         <button class="difficulty-card" data-difficulty="advanced" type="button">
           <span class="difficulty-name">上級</span>
           <strong>40 × 60</strong>
-          <span>爆弾 150 個</span>
+          <span>爆弾 <span data-bomb-count="advanced">150</span> 個</span>
           <small>マスサイズ 20px</small>
         </button>
       </div>
@@ -75,22 +73,18 @@
           <span class="hud-label">TIME</span>
           <strong id="timer">000</strong>
         </div>
-        <button id="restart-button" class="restart-button"
-          type="button" aria-label="リスタート">↻</button>
+        <button id="restart-button" class="restart-button" type="button" aria-label="リスタート">↻</button>
       </div>
-
       <div class="game-meta">
         <span id="current-mode">初級</span>
         <span id="board-size">10 × 10</span>
         <span id="game-message" aria-live="polite">最初のマスを選んでスタート！</span>
       </div>
-
       <div id="board-viewport" class="board-viewport">
         <div id="board-stage" class="board-stage">
           <canvas id="board" aria-label="マインスイーパー盤面"></canvas>
         </div>
       </div>
-
       <div class="bottom-bar">
         <p>数字は周囲5×5マス（中央を除く）の爆弾数</p>
         <p>スクロールして盤面全体を確認できます</p>
@@ -102,7 +96,6 @@
         <p class="eyebrow">HOW TO PLAY</p>
         <h2>ルール説明</h2>
       </div>
-
       <h3>基本ルール</h3>
       <ul>
         <li>マスを開いて、隠れた爆弾を避けます。</li>
@@ -110,7 +103,6 @@
         <li>数字の範囲は5×5マスで、中央を除いた最大24マスです。</li>
         <li>爆弾以外のマスをすべて開くとクリアです。</li>
       </ul>
-
       <h3>操作方法</h3>
       <ul>
         <li>左クリック / タップ：マスを開く</li>
@@ -118,32 +110,24 @@
         <li>Rキー：リスタート</li>
         <li>Escキー：難易度選択に戻る</li>
       </ul>
-
       <h3>特殊ルール</h3>
       <ul>
         <li>最初に開いたマスには爆弾が配置されません。</li>
         <li>数字が0のマスを開くと、周囲24マスも自動で開きます。</li>
       </ul>
-
       <h3>難易度</h3>
       <ul>
-        <li>初級：10 × 10マス / 爆弾7個</li>
-        <li>中級：16 × 30マス / 爆弾35個</li>
-        <li>上級：40 × 60マス / 爆弾150個</li>
+        <li>初級：10 × 10マス / 爆弾<span data-rule-bombs="beginner">7</span>個</li>
+        <li>中級：16 × 30マス / 爆弾<span data-rule-bombs="intermediate">35</span>個</li>
+        <li>上級：40 × 60マス / 爆弾<span data-rule-bombs="advanced">150</span>個</li>
       </ul>
-
       <h3>数字の見方</h3>
-      <p>
-        数字は、対象マスから縦・横・斜めに2マス以内にある
-        爆弾の合計数を表します。通常のマインスイーパーとは異なり、
-        周囲8マスではなく最大24マスを数えます。
-      </p>
+      <p>数字は、対象マスから縦・横・斜めに2マス以内にある爆弾の合計数を表します。通常のマインスイーパーとは異なり、周囲8マスではなく最大24マスを数えます。</p>
     </section>
 
     <dialog id="help-dialog" class="help-dialog">
       <form method="dialog">
-        <button class="dialog-close" type="submit"
-          aria-label="閉じる">×</button>
+        <button class="dialog-close" type="submit" aria-label="閉じる">×</button>
         <p class="eyebrow">HOW TO PLAY</p>
         <h2>操作方法</h2>
         <ul>
