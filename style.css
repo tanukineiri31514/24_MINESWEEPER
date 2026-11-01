@@ -89,6 +89,56 @@ h1 span { color: var(--accent); }
 .primary-button { width: 100%; border: 0; border-radius: 9px; padding: 12px; margin-top: 8px; background: var(--accent); color: #10202a; font-weight: 800; cursor: pointer; }
 footer { padding: 25px 0 4px; text-align: center; color: #667891; font: 600 10px "Barlow Condensed", sans-serif; letter-spacing: .16em; }
 footer span { color: var(--accent); }
+/* タブメニュー */
+.tab-menu {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tab-button {
+  padding: 12px 22px;
+  border: none;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tab-button:hover {
+  color: var(--accent);
+}
+
+.tab-button.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* ルール説明 */
+.rules-screen {
+  padding: clamp(22px, 5vw, 48px);
+}
+
+.rules-content {
+  max-width: 760px;
+  margin: 0 auto;
+  line-height: 1.9;
+  color: #c2cede;
+}
+
+.rules-content h3 {
+  margin-top: 28px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  color: var(--accent);
+  font-size: 16px;
+}
+
+.rules-content li {
+  margin-bottom: 8px;
+}
 @media (max-width: 700px) {
   .app { padding: 19px 12px 12px; }
   .topbar { align-items: flex-start; margin-bottom: 18px; }
