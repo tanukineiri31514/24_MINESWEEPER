@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111827">
+  <title>24 Minesweeper</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">A DIFFERENT KIND OF MINESWEEPER</p>
+        <h1>24 <span>MINESWEEPER</span></h1>
+        <p class="subtitle">周囲 5 × 5 マスから、爆弾を見つけ出そう。</p>
+      </div>
+      <div class="top-actions">
+        <button id="help-button" class="icon-button" type="button" aria-label="遊び方">?</button>
+        <button id="menu-button" class="ghost-button" type="button">難易度選択</button>
+      </div>
+    </header>
+
+    <section id="menu-screen" class="menu-screen panel">
+      <div class="section-heading">
+        <p class="eyebrow">SELECT MODE</p>
+        <h2>難易度を選択</h2>
+        <p>数字は自分を除く周囲24マスの爆弾数を表します。</p>
+      </div>
+      <div class="difficulty-grid">
+        <button class="difficulty-card" data-difficulty="beginner" type="button">
+          <span class="difficulty-name">初級</span>
+          <strong>10 × 10</strong>
+          <span>爆弾 7 個</span>
+          <small>マスサイズ 50px</small>
+        </button>
+        <button class="difficulty-card" data-difficulty="intermediate" type="button">
+          <span class="difficulty-name">中級</span>
+          <strong>16 × 30</strong>
+          <span>爆弾 35 個</span>
+          <small>マスサイズ 30px</small>
+        </button>
+        <button class="difficulty-card" data-difficulty="advanced" type="button">
+          <span class="difficulty-name">上級</span>
+          <strong>40 × 60</strong>
+          <span>爆弾 150 個</span>
+          <small>マスサイズ 20px</small>
+        </button>
+      </div>
+      <div class="rule-strip">
+        <span>左クリック / タップ：開く</span>
+        <span>右クリック / 長押し：旗</span>
+        <span>最初のクリックは安全</span>
+      </div>
+    </section>
+
+    <section id="game-screen" class="game-screen hidden">
+      <div class="hud panel">
+        <div class="hud-item">
+          <span class="hud-label">BOMBS</span>
+          <strong id="bomb-count">007</strong>
+        </div>
+        <div class="hud-item">
+          <span class="hud-label">FLAGS</span>
+          <strong id="flag-count">000</strong>
+        </div>
+        <div class="hud-item timer-item">
+          <span class="hud-label">TIME</span>
+          <strong id="timer">000</strong>
+        </div>
+        <button id="restart-button" class="restart-button" type="button" aria-label="リスタート">↻</button>
+      </div>
+
+      <div class="game-meta">
+        <span id="current-mode">初級</span>
+        <span id="board-size">10 × 10</span>
+        <span id="game-message" aria-live="polite">最初のマスを選んでスタート！</span>
+      </div>
+
+      <div id="board-viewport" class="board-viewport">
+        <div id="board-stage" class="board-stage">
+          <canvas id="board" aria-label="マインスイーパー盤面"></canvas>
+        </div>
+      </div>
+
+      <div class="bottom-bar">
+        <p>数字は周囲5×5マス（中央を除く）の爆弾数</p>
+        <p>スクロールして盤面全体を確認できます</p>
+      </div>
+    </section>
+
+    <dialog id="help-dialog" class="help-dialog">
+      <form method="dialog">
+        <button class="dialog-close" aria-label="閉じる">×</button>
+        <p class="eyebrow">HOW TO PLAY</p>
+        <h2>遊び方</h2>
+        <ul>
+          <li>マスを開いて、隠れた爆弾を避けよう。</li>
+          <li>数字は、そのマスの周囲2マス以内にある爆弾の数（最大24個）。</li>
+          <li>右クリック、またはスマホでマスを長押しすると旗を立てられる。</li>
+          <li>数字が0のマスを開くと、周囲24マスも自動で開く。</li>
+          <li>最初に開いたマスには爆弾が配置されない。</li>
+          <li>爆弾以外のマスをすべて開くとクリア！</li>
+        </ul>
+        <button class="primary-button dialog-ok">わかった</button>
+      </form>
+    </dialog>
+
+    <footer>24 MINESWEEPER <span>・</span> Made for the browser</footer>
+  </main>
+  <script src="./script.js"></script>
+</body>
+</html>
