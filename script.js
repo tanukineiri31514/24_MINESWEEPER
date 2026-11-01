@@ -4,7 +4,7 @@
   const DIFFICULTIES = {
     beginner: { name: "初級", h: 10, w: 10, bombs: 7, cell: 50 },
     intermediate: { name: "中級", h: 16, w: 30, bombs: 35, cell: 30 },
-    advanced: { name: "上級", h: 40, w: 60, bombs: 150, cell: 20 }
+    advanced: { name: "上級", h: 40, w: 60, bombs: 250, cell: 20 }
   };
 
   const $ = (id) => document.getElementById(id);
@@ -34,6 +34,18 @@
     flag: "#f06b69",
     text: "#172334"
   };
+
+  // 難易度設定を、難易度選択画面とルール説明にも反映する。
+  function updateDifficultyInfo() {
+    for (const [mode, cfg] of Object.entries(DIFFICULTIES)) {
+      document.querySelectorAll(`[data-bomb-count="${mode}"]`).forEach((element) => {
+        element.textContent = cfg.bombs;
+      });
+      document.querySelectorAll(`[data-rule-bombs="${mode}"]`).forEach((element) => {
+        element.textContent = cfg.bombs;
+      });
+    }
+  }
 
   function switchTab(tab) {
     currentTab = tab;
@@ -383,7 +395,8 @@
 
   $("help-button").addEventListener("click", () => $("help-dialog").showModal());
 
-  // 初期表示は難易度選択画面
+  // 初期表示時に難易度情報を反映
+  updateDifficultyInfo();
   switchTab("game");
 
   window.addEventListener("resize", () => {
