@@ -465,7 +465,6 @@
   updateDifficultyInfo();
   switchTab("game");
   setActionMode("open");
-
   window.addEventListener("resize", () => {
     if (game) renderBoard();
   });
