@@ -1,10 +1,11 @@
+
 (() => {
   "use strict";
 
   const DIFFICULTIES = {
     beginner: { name: "初級", h: 10, w: 10, bombs: 7, cell: 50 },
     intermediate: { name: "中級", h: 16, w: 30, bombs: 35, cell: 30 },
-    advanced: { name: "上級", h: 40, w: 60, bombs: 250, cell: 25 }
+    advanced: { name: "上級", h: 40, w: 60, bombs: 200, cell: 25 }
   };
 
   const $ = (id) => document.getElementById(id);
@@ -14,14 +15,12 @@
   const canvas = $("board");
   const ctx = canvas.getContext("2d");
   const viewport = $("board-viewport");
-  const stage = $("board-stage");
 
   let game = null;
   let timerId = null;
   let currentTab = "game";
   let actionMode = "open";
   let audioContext = null;
-
   const MIN_ZOOM = 0.5;
   const MAX_ZOOM = 2;
   const ZOOM_STEP = 0.1;
@@ -107,47 +106,48 @@
     $("flag-count").textContent = "000";
     $("timer").textContent = "000";
     $("clear-overlay").classList.add("hidden");
-
     updateZoomControls();
 
     setMessage("最初のマスを選んでスタート！");
+    stopTimer();
+    viewport.scrollLeft = 0;
+    viewport.scrollTop = 0;
+    // ゲーム開始前から、全マスを伏せた状態で表示する。
     renderBoard();
     updateHud();
-    stopTimer();
+    // 画面切り替え直後にレイアウトが確定した後も描画を保証する。
+    window.requestAnimationFrame(() => {
+      if (game && game.mode === mode && !game.generated) renderBoard();
+    });
   }
 
   // 最初のクリック位置からランダムな順序でBFSを行い、
   // 10〜15マスを連続した初期安全領域として選ぶ。
-  // このゲームの隣接範囲は周囲5×5（中央を除く）。
+  // 初手の安全領域は上下左右の4近傍で連結させる。
   function createInitialSafeCells(firstY, firstX) {
     const targetCount = 10 + Math.floor(Math.random() * 6);
-
     const queue = [[firstY, firstX]];
     const visited = new Set([`${firstY},${firstX}`]);
     const safeCells = [[firstY, firstX]];
-
     let head = 0;
 
     while (head < queue.length && visited.size < targetCount) {
       const [y, x] = queue[head++];
       const neighbors = [];
 
-      // 現在のマスに隣接する未探索マスを集める。
-      for (let dy = -2; dy <= 2; dy++) {
-        for (let dx = -2; dx <= 2; dx++) {
-          if (dy === 0 && dx === 0) continue;
+      // 上下左右の4近傍だけを候補にする。
+      const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+      for (const [dy, dx] of directions) {
+        const ny = y + dy;
+        const nx = x + dx;
+        const key = `${ny},${nx}`;
 
-          const ny = y + dy;
-          const nx = x + dx;
-          const key = `${ny},${nx}`;
-
-          if (
-            inside(ny, nx) &&
-            !game.flags[ny][nx] &&
-            !visited.has(key)
-          ) {
-            neighbors.push([ny, nx, key]);
-          }
+        if (
+          inside(ny, nx) &&
+          !game.flags[ny][nx] &&
+          !visited.has(key)
+        ) {
+          neighbors.push([ny, nx, key]);
         }
       }
 
@@ -158,6 +158,8 @@
       }
 
       // 訪問済みが目標数になった時点で追加を打ち切る。
+      // 追加するマスは必ず探索中のマスに隣接するため、
+      // safeCells全体はひと続きの領域になる。
       for (const [ny, nx, key] of neighbors) {
         if (visited.size >= targetCount) break;
         if (visited.has(key)) continue;
@@ -176,7 +178,6 @@
     const safeSet = new Set(
       safeCells.map(([y, x]) => `${y},${x}`)
     );
-
     const candidates = [];
 
     for (let y = 0; y < game.h; y++) {
@@ -225,22 +226,20 @@
   }
 
   function reveal(y, x) {
-    if (!inside(y, x) || game.over || game.opened[y][x] || game.flags[y][x]) {
-      return;
-    }
+    if (!inside(y, x) || game.over || game.opened[y][x] || game.flags[y][x]) return;
 
     let initialSafeCells = null;
 
     if (!game.generated) {
-      // 先にランダムBFSで初期安全領域を決める。
-      initialSafeCells =
-        game.mode === "beginner"
-          ? [[y, x]]
-          : createInitialSafeCells(y, x);
+      // 1. 初回クリックの座標を始点として4近傍BFSで安全領域を決定する。
+      //    初級はクリックした1マスのみを保護する。
+      initialSafeCells = game.mode === "beginner"
+        ? [[y, x]]
+        : createInitialSafeCells(y, x);
 
-      // 初期安全領域を除外して爆弾を配置し、数字を計算する。
+      // 2. 安全領域以外に爆弾を置く。
+      // 3. 爆弾配置が完了してから周囲5×5の爆弾数を計算する。
       placeBombs(initialSafeCells);
-
       game.generated = true;
       game.startedAt = Date.now();
       startTimer();
@@ -253,44 +252,39 @@
       return;
     }
 
-    // 初回はBFSで選んだ安全領域全体をキューに入れる。
-    // 2回目以降はクリックした1マスから通常どおり開く。
+    // 4. 中級・上級の初回のみ、BFSで確保した10〜15マスを開く。
+    //    続けて、その中の0マスから周囲5×5に展開する。
+    //    2回目以降はクリックしたマスから通常の0展開を行う。
     const queue = initialSafeCells ?? [[y, x]];
+    const queued = new Set(queue.map(([qy, qx]) => `${qy},${qx}`));
     let head = 0;
 
     while (head < queue.length) {
       const [cy, cx] = queue[head++];
-
-      if (
-        !inside(cy, cx) ||
-        game.opened[cy][cx] ||
-        game.flags[cy][cx]
-      ) {
-        continue;
-      }
-
+      if (game.opened[cy][cx] || game.flags[cy][cx]) continue;
       if (game.board[cy][cx] === -1) continue;
 
       game.opened[cy][cx] = true;
       game.openedCount++;
 
-      // 0のマスから周囲24マスへ広げる。
-      if (game.board[cy][cx] === 0) {
-        for (let dy = -2; dy <= 2; dy++) {
-          for (let dx = -2; dx <= 2; dx++) {
-            if (dy === 0 && dx === 0) continue;
+      if (game.board[cy][cx] !== 0) continue;
 
-            const ny = cy + dy;
-            const nx = cx + dx;
+      for (let dy = -2; dy <= 2; dy++) {
+        for (let dx = -2; dx <= 2; dx++) {
+          if (dy === 0 && dx === 0) continue;
+          const ny = cy + dy;
+          const nx = cx + dx;
+          const key = `${ny},${nx}`;
 
-            if (
-              inside(ny, nx) &&
-              !game.opened[ny][nx] &&
-              !game.flags[ny][nx] &&
-              game.board[ny][nx] !== -1
-            ) {
-              queue.push([ny, nx]);
-            }
+          if (
+            inside(ny, nx) &&
+            !game.opened[ny][nx] &&
+            !game.flags[ny][nx] &&
+            game.board[ny][nx] !== -1 &&
+            !queued.has(key)
+          ) {
+            queued.add(key);
+            queue.push([ny, nx]);
           }
         }
       }
@@ -326,9 +320,7 @@
     if (!won) {
       for (let y = 0; y < game.h; y++) {
         for (let x = 0; x < game.w; x++) {
-          if (game.board[y][x] === -1) {
-            game.opened[y][x] = true;
-          }
+          if (game.board[y][x] === -1) game.opened[y][x] = true;
         }
       }
 
@@ -345,7 +337,6 @@
 
   function updateZoomControls() {
     if (!game) return;
-
     $("zoom-reset-button").textContent = `${Math.round(game.zoom * 100)}%`;
     $("zoom-out-button").disabled = game.zoom <= MIN_ZOOM;
     $("zoom-in-button").disabled = game.zoom >= MAX_ZOOM;
@@ -353,125 +344,60 @@
 
   function setZoom(nextZoom) {
     if (!game) return;
-
     const oldCellSize = game.cell * game.zoom;
+    const relativeX = (viewport.scrollLeft + viewport.clientWidth / 2) / oldCellSize;
+    const relativeY = (viewport.scrollTop + viewport.clientHeight / 2) / oldCellSize;
 
-    // 現在の表示範囲の中央位置を保存する。
-    const relativeX =
-      (viewport.scrollLeft + viewport.clientWidth / 2) / oldCellSize;
-
-    const relativeY =
-      (viewport.scrollTop + viewport.clientHeight / 2) / oldCellSize;
-
-    game.zoom = Math.max(
-      MIN_ZOOM,
-      Math.min(MAX_ZOOM, Math.round(nextZoom * 10) / 10)
-    );
-
+    game.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round(nextZoom * 10) / 10));
     renderBoard();
     updateZoomControls();
 
-    // 拡大縮小後も、できるだけ同じ場所が中央に来るようにする。
     const newCellSize = game.cell * game.zoom;
-
-    viewport.scrollLeft = Math.max(
-      0,
-      relativeX * newCellSize - viewport.clientWidth / 2
-    );
-
-    viewport.scrollTop = Math.max(
-      0,
-      relativeY * newCellSize - viewport.clientHeight / 2
-    );
+    viewport.scrollLeft = Math.max(0, relativeX * newCellSize - viewport.clientWidth / 2);
+    viewport.scrollTop = Math.max(0, relativeY * newCellSize - viewport.clientHeight / 2);
   }
 
   // 外部音源を使わずWeb Audio APIで短い効果音を生成する。
   function playSound(type) {
     try {
-      const AudioContextClass =
-        window.AudioContext || window.webkitAudioContext;
-
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       if (!AudioContextClass) return;
-
-      if (!audioContext) {
-        audioContext = new AudioContextClass();
-      }
-
-      if (audioContext.state === "suspended") {
-        audioContext.resume();
-      }
+      if (!audioContext) audioContext = new AudioContextClass();
+      if (audioContext.state === "suspended") audioContext.resume();
 
       const now = audioContext.currentTime;
-
       const master = audioContext.createGain();
       master.connect(audioContext.destination);
-
       master.gain.setValueAtTime(0.0001, now);
-
-      master.gain.exponentialRampToValueAtTime(
-        type === "clear" ? 0.16 : 0.09,
-        now + 0.015
-      );
-
-      master.gain.exponentialRampToValueAtTime(
-        0.0001,
-        now + (type === "clear" ? 0.9 : 0.22)
-      );
+      master.gain.exponentialRampToValueAtTime(type === "clear" ? 0.16 : 0.09, now + 0.015);
+      master.gain.exponentialRampToValueAtTime(0.0001, now + (type === "clear" ? 0.9 : 0.22));
 
       if (type === "clear") {
-        // クリア時のファンファーレ。
         [523.25, 659.25, 783.99, 1046.5].forEach((frequency, index) => {
           const oscillator = audioContext.createOscillator();
           const gain = audioContext.createGain();
-
           oscillator.type = "sine";
-          oscillator.frequency.setValueAtTime(
-            frequency,
-            now + index * 0.13
-          );
-
+          oscillator.frequency.setValueAtTime(frequency, now + index * 0.13);
           gain.gain.setValueAtTime(0.0001, now);
-          gain.gain.setValueAtTime(
-            0.55,
-            now + index * 0.13
-          );
-
-          gain.gain.exponentialRampToValueAtTime(
-            0.0001,
-            now + index * 0.13 + 0.24
-          );
-
+          gain.gain.setValueAtTime(0.55, now + index * 0.13);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.13 + 0.24);
           oscillator.connect(gain);
           gain.connect(master);
-
           oscillator.start(now + index * 0.13);
           oscillator.stop(now + index * 0.13 + 0.26);
         });
       } else {
         const oscillator = audioContext.createOscillator();
-
         oscillator.connect(master);
-
         if (type === "bomb") {
-          // 爆弾を踏んだときの低い音。
           oscillator.type = "sawtooth";
           oscillator.frequency.setValueAtTime(150, now);
-
-          oscillator.frequency.exponentialRampToValueAtTime(
-            38,
-            now + 0.2
-          );
+          oscillator.frequency.exponentialRampToValueAtTime(38, now + 0.2);
         } else {
-          // マスを開いたときの短い音。
           oscillator.type = "sine";
           oscillator.frequency.setValueAtTime(660, now);
-
-          oscillator.frequency.exponentialRampToValueAtTime(
-            440,
-            now + 0.09
-          );
+          oscillator.frequency.exponentialRampToValueAtTime(440, now + 0.09);
         }
-
         oscillator.start(now);
         oscillator.stop(now + 0.22);
       }
@@ -504,7 +430,6 @@
     if (!game || game.startedAt === null) return 0;
 
     const end = game.endedAt ?? Date.now();
-
     return Math.floor((end - game.startedAt) / 1000);
   }
 
@@ -514,24 +439,14 @@
   }
 
   function stopTimer() {
-    if (timerId !== null) {
-      window.clearInterval(timerId);
-    }
-
+    if (timerId !== null) window.clearInterval(timerId);
     timerId = null;
   }
 
   function drawBomb(x, y, size) {
     ctx.fillStyle = COLORS.bomb;
-
     ctx.beginPath();
-    ctx.arc(
-      x + size / 2,
-      y + size / 2,
-      size * 0.25,
-      0,
-      Math.PI * 2
-    );
+    ctx.arc(x + size / 2, y + size / 2, size * 0.25, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.strokeStyle = "#9d3038";
@@ -542,24 +457,20 @@
       const a = i * Math.PI / 2;
 
       ctx.beginPath();
-
       ctx.moveTo(
         x + size / 2 + Math.cos(a) * size * 0.27,
         y + size / 2 + Math.sin(a) * size * 0.27
       );
-
       ctx.lineTo(
         x + size / 2 + Math.cos(a) * size * 0.36,
         y + size / 2 + Math.sin(a) * size * 0.36
       );
-
       ctx.stroke();
     }
   }
 
   function drawFlag(x, y, size) {
     ctx.fillStyle = COLORS.flag;
-
     ctx.beginPath();
     ctx.moveTo(x + size * 0.30, y + size * 0.20);
     ctx.lineTo(x + size * 0.72, y + size * 0.36);
@@ -569,7 +480,6 @@
 
     ctx.strokeStyle = "#f8b1a8";
     ctx.lineWidth = Math.max(1, size * 0.045);
-
     ctx.beginPath();
     ctx.moveTo(x + size * 0.29, y + size * 0.18);
     ctx.lineTo(x + size * 0.29, y + size * 0.78);
@@ -580,18 +490,13 @@
   function renderBoard() {
     if (!game) return;
 
-    const dpr = Math.max(
-      1,
-      Math.min(2, window.devicePixelRatio || 1)
-    );
-
+    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
     const cellSize = game.cell * game.zoom;
     const cssWidth = game.w * cellSize;
     const cssHeight = game.h * cellSize;
 
     canvas.width = Math.round(cssWidth * dpr);
     canvas.height = Math.round(cssHeight * dpr);
-
     canvas.style.width = `${cssWidth}px`;
     canvas.style.height = `${cssHeight}px`;
 
@@ -610,16 +515,9 @@
 
         if (!opened) {
           ctx.fillStyle = COLORS.closedLight;
-
-          ctx.fillRect(
-            px + 1,
-            py + 1,
-            size - 2,
-            Math.max(2, size * 0.07)
-          );
+          ctx.fillRect(px + 1, py + 1, size - 2, Math.max(2, size * 0.07));
 
           ctx.fillStyle = COLORS.closedDark;
-
           ctx.fillRect(
             px + 1,
             py + size - Math.max(3, size * 0.07),
@@ -632,7 +530,6 @@
           drawBomb(px, py, size);
         } else if (opened && game.board[y][x] > 0) {
           const value = game.board[y][x];
-
           const numberColors = [
             "",
             "#2464d8",
@@ -646,31 +543,17 @@
           ];
 
           ctx.fillStyle = numberColors[value] || "#182333";
-
-          ctx.font =
-            `700 ${Math.max(10, Math.floor(size * 0.48))}px "Noto Sans JP", sans-serif`;
-
+          ctx.font = `700 ${Math.max(10, Math.floor(size * 0.48))}px "Noto Sans JP", sans-serif`;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-
-          ctx.fillText(
-            String(value),
-            px + size / 2,
-            py + size / 2 + 1
-          );
+          ctx.fillText(String(value), px + size / 2, py + size / 2 + 1);
         } else if (!opened && game.flags[y][x]) {
           drawFlag(px, py, size);
         }
 
         ctx.strokeStyle = opened ? COLORS.openedEdge : COLORS.grid;
         ctx.lineWidth = Math.max(1, size >= 30 ? 1.5 : 1);
-
-        ctx.strokeRect(
-          px + 0.5,
-          py + 0.5,
-          size - 1,
-          size - 1
-        );
+        ctx.strokeRect(px + 0.5, py + 0.5, size - 1, size - 1);
       }
     }
   }
@@ -680,12 +563,8 @@
 
     // getBoundingClientRect() はCSSピクセルなので、DPR補正は不要。
     return {
-      x: Math.floor(
-        (event.clientX - rect.left) / (game.cell * game.zoom)
-      ),
-      y: Math.floor(
-        (event.clientY - rect.top) / (game.cell * game.zoom)
-      )
+      x: Math.floor((event.clientX - rect.left) / (game.cell * game.zoom)),
+      y: Math.floor((event.clientY - rect.top) / (game.cell * game.zoom))
     };
   }
 
@@ -703,21 +582,19 @@
     }
   }
 
-  // 左クリック・タップ：選択中のモードで操作。
+  // 左クリック・タップ：選択中のモードで操作
   canvas.addEventListener("click", (event) => {
     if (event.button !== 0) return;
-
     handleCell(event, actionMode === "flag");
   });
 
-  // PCの右クリック：旗を立てる・外す。
+  // PCの右クリック：旗を立てる・外す
   canvas.addEventListener("contextmenu", (event) => {
     event.preventDefault();
-
     handleCell(event, true);
   });
 
-  // 操作モード切り替えボタン。
+  // 操作モード切り替えボタン
   document.querySelectorAll("[data-action-mode]").forEach((button) => {
     button.addEventListener("click", () => {
       setActionMode(button.dataset.actionMode);
@@ -725,73 +602,51 @@
   });
 
   document.querySelectorAll("[data-tab]").forEach((button) => {
-    button.addEventListener("click", () => {
-      switchTab(button.dataset.tab);
-    });
+    button.addEventListener("click", () => switchTab(button.dataset.tab));
   });
 
   document.querySelectorAll("[data-difficulty]").forEach((button) => {
-    button.addEventListener("click", () => {
-      createGame(button.dataset.difficulty);
-    });
+    button.addEventListener("click", () => createGame(button.dataset.difficulty));
   });
 
   $("zoom-out-button").addEventListener("click", () => {
-    if (game) {
-      setZoom(game.zoom - ZOOM_STEP);
-    }
+    if (game) setZoom(game.zoom - ZOOM_STEP);
   });
 
   $("zoom-in-button").addEventListener("click", () => {
-    if (game) {
-      setZoom(game.zoom + ZOOM_STEP);
-    }
+    if (game) setZoom(game.zoom + ZOOM_STEP);
   });
 
   $("zoom-reset-button").addEventListener("click", () => {
-    if (game) {
-      setZoom(1);
-    }
+    if (game) setZoom(1);
   });
 
   $("restart-button").addEventListener("click", () => {
-    if (game) {
-      createGame(game.mode);
-    }
+    if (game) createGame(game.mode);
   });
 
   $("menu-button").addEventListener("click", () => {
     stopTimer();
     game = null;
-
     switchTab("game");
   });
 
-  $("help-button").addEventListener("click", () => {
-    $("help-dialog").showModal();
-  });
+  $("help-button").addEventListener("click", () => $("help-dialog").showModal());
 
-  // 初期表示時に難易度情報を反映。
+  // 初期表示時に難易度情報を反映
   updateDifficultyInfo();
   switchTab("game");
   setActionMode("open");
 
   window.addEventListener("resize", () => {
-    if (game) {
-      renderBoard();
-    }
+    if (game) renderBoard();
   });
 
-  // キーボード操作：Rでリスタート、Escapeで難易度選択へ。
+  // キーボード操作：Rでリスタート、Escapeで難易度選択へ
   window.addEventListener("keydown", (event) => {
     if (!game || $("help-dialog").open) return;
 
-    if (event.key.toLowerCase() === "r") {
-      createGame(game.mode);
-    }
-
-    if (event.key === "Escape") {
-      $("menu-button").click();
-    }
+    if (event.key.toLowerCase() === "r") createGame(game.mode);
+    if (event.key === "Escape") $("menu-button").click();
   });
 })();
