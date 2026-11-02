@@ -4,8 +4,8 @@
 
   const DIFFICULTIES = {
     beginner: { name: "初級", h: 10, w: 10, bombs: 7, cell: 50 },
-    intermediate: { name: "中級", h: 16, w: 30, bombs: 35, cell: 30 },
-    advanced: { name: "上級", h: 40, w: 60, bombs: 250, cell: 25 }
+    intermediate: { name: "中級", h: 16, w: 30, bombs: 35, cell: 40 },
+    advanced: { name: "上級", h: 40, w: 60, bombs: 250, cell: 40 }
   };
 
   const $ = (id) => document.getElementById(id);
