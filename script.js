@@ -133,7 +133,6 @@
       const neighbors = [];
 
       // 現在のマスに隣接する未探索マスを集める。
-      // このゲームでは周囲5×5（中央を除く）が隣接範囲。
       for (let dy = -2; dy <= 2; dy++) {
         for (let dx = -2; dx <= 2; dx++) {
           if (dy === 0 && dx === 0) continue;
@@ -159,8 +158,6 @@
       }
 
       // 訪問済みが目標数になった時点で追加を打ち切る。
-      // 追加するマスは必ず探索中のマスに隣接するため、
-      // safeCells全体はひと続きの領域になる。
       for (const [ny, nx, key] of neighbors) {
         if (visited.size >= targetCount) break;
         if (visited.has(key)) continue;
@@ -235,13 +232,13 @@
     let initialSafeCells = null;
 
     if (!game.generated) {
-      // 先にランダムBFSで初期安全領域を決め、
-      // その領域を除外して爆弾を配置し、最後に数字を計算する。
+      // 先にランダムBFSで初期安全領域を決める。
       initialSafeCells =
         game.mode === "beginner"
           ? [[y, x]]
           : createInitialSafeCells(y, x);
 
+      // 初期安全領域を除外して爆弾を配置し、数字を計算する。
       placeBombs(initialSafeCells);
 
       game.generated = true;
@@ -258,7 +255,6 @@
 
     // 初回はBFSで選んだ安全領域全体をキューに入れる。
     // 2回目以降はクリックした1マスから通常どおり開く。
-    // 0のマスからは周囲24マスへ広げる。
     const queue = initialSafeCells ?? [[y, x]];
     let head = 0;
 
@@ -278,6 +274,7 @@
       game.opened[cy][cx] = true;
       game.openedCount++;
 
+      // 0のマスから周囲24マスへ広げる。
       if (game.board[cy][cx] === 0) {
         for (let dy = -2; dy <= 2; dy++) {
           for (let dx = -2; dx <= 2; dx++) {
@@ -359,6 +356,7 @@
 
     const oldCellSize = game.cell * game.zoom;
 
+    // 現在の表示範囲の中央位置を保存する。
     const relativeX =
       (viewport.scrollLeft + viewport.clientWidth / 2) / oldCellSize;
 
@@ -373,6 +371,7 @@
     renderBoard();
     updateZoomControls();
 
+    // 拡大縮小後も、できるだけ同じ場所が中央に来るようにする。
     const newCellSize = game.cell * game.zoom;
 
     viewport.scrollLeft = Math.max(
@@ -432,7 +431,6 @@
           );
 
           gain.gain.setValueAtTime(0.0001, now);
-
           gain.gain.setValueAtTime(
             0.55,
             now + index * 0.13
