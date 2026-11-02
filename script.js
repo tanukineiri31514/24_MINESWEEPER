@@ -4,8 +4,8 @@
 
   const DIFFICULTIES = {
     beginner: { name: "初級", h: 10, w: 10, bombs: 7, cell: 50 },
-    intermediate: { name: "中級", h: 16, w: 30, bombs: 35, cell: 40 },
-    advanced: { name: "上級", h: 40, w: 60, bombs: 250, cell: 40 }
+    intermediate: { name: "中級", h: 16, w: 30, bombs: 35, cell: 30 },
+    advanced: { name: "上級", h: 40, w: 60, bombs: 200, cell: 25 }
   };
 
   const $ = (id) => document.getElementById(id);
@@ -21,6 +21,10 @@
   let timerId = null;
   let currentTab = "game";
   let actionMode = "open";
+  let audioContext = null;
+  const MIN_ZOOM = 0.5;
+  const MAX_ZOOM = 2;
+  const ZOOM_STEP = 0.1;
 
   const COLORS = {
     closed: "#718096",
@@ -90,6 +94,7 @@
       startedAt: null,
       endedAt: null,
       openedCount: 0,
+      zoom: 1,
       mode
     };
 
@@ -101,6 +106,8 @@
     $("bomb-count").textContent = String(cfg.bombs).padStart(3, "0");
     $("flag-count").textContent = "000";
     $("timer").textContent = "000";
+    $("clear-overlay").classList.add("hidden");
+    updateZoomControls();
 
     setMessage("最初のマスを選んでスタート！");
     renderBoard();
@@ -151,6 +158,35 @@
     }
   }
 
+  // 中級・上級は初手の運要素を減らすため、最初のクリック時に
+  // クリックしたマスを含む10〜15マスを安全な状態で先に開けておく。
+  function openInitialSafeCells(firstY, firstX) {
+    if (game.mode === "beginner") return;
+
+    const targetCount = 10 + Math.floor(Math.random() * 6);
+    const candidates = [];
+    for (let y = 0; y < game.h; y++) {
+      for (let x = 0; x < game.w; x++) {
+        if ((y !== firstY || x !== firstX) && game.board[y][x] !== -1) {
+          candidates.push([y, x]);
+        }
+      }
+    }
+
+    // Fisher-Yatesで候補をシャッフルし、必要な数だけ開く。
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const k = Math.floor(Math.random() * (i + 1));
+      [candidates[i], candidates[k]] = [candidates[k], candidates[i]];
+    }
+
+    // 最初にクリックした1マスは通常のreveal処理で開く。
+    for (let i = 0; i < targetCount - 1 && i < candidates.length; i++) {
+      const [y, x] = candidates[i];
+      game.opened[y][x] = true;
+      game.openedCount++;
+    }
+  }
+
   function inside(y, x) {
     return y >= 0 && y < game.h && x >= 0 && x < game.w;
   }
@@ -160,6 +196,7 @@
 
     if (!game.generated) {
       placeBombs(y, x);
+      openInitialSafeCells(y, x);
       game.generated = true;
       game.startedAt = Date.now();
       startTimer();
@@ -167,6 +204,7 @@
 
     if (game.board[y][x] === -1) {
       game.opened[y][x] = true;
+      playSound("bomb");
       finishGame(false);
       return;
     }
@@ -209,6 +247,7 @@
       finishGame(true);
     } else {
       setMessage("爆弾を避けて進もう！");
+      playSound("open");
     }
 
     renderBoard();
@@ -240,11 +279,84 @@
 
       setMessage("ゲームオーバー — もう一度挑戦しよう");
     } else {
-      setMessage("CLEAR! おめでとう！");
+      setMessage("クリア！おめでとう！！");
+      $("clear-overlay").classList.remove("hidden");
+      playSound("clear");
     }
 
     renderBoard();
     updateHud();
+  }
+
+  function updateZoomControls() {
+    if (!game) return;
+    $("zoom-reset-button").textContent = `${Math.round(game.zoom * 100)}%`;
+    $("zoom-out-button").disabled = game.zoom <= MIN_ZOOM;
+    $("zoom-in-button").disabled = game.zoom >= MAX_ZOOM;
+  }
+
+  function setZoom(nextZoom) {
+    if (!game) return;
+    const oldCellSize = game.cell * game.zoom;
+    const relativeX = (viewport.scrollLeft + viewport.clientWidth / 2) / oldCellSize;
+    const relativeY = (viewport.scrollTop + viewport.clientHeight / 2) / oldCellSize;
+
+    game.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round(nextZoom * 10) / 10));
+    renderBoard();
+    updateZoomControls();
+
+    const newCellSize = game.cell * game.zoom;
+    viewport.scrollLeft = Math.max(0, relativeX * newCellSize - viewport.clientWidth / 2);
+    viewport.scrollTop = Math.max(0, relativeY * newCellSize - viewport.clientHeight / 2);
+  }
+
+  // 外部音源を使わずWeb Audio APIで短い効果音を生成する。
+  function playSound(type) {
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+      if (!audioContext) audioContext = new AudioContextClass();
+      if (audioContext.state === "suspended") audioContext.resume();
+
+      const now = audioContext.currentTime;
+      const master = audioContext.createGain();
+      master.connect(audioContext.destination);
+      master.gain.setValueAtTime(0.0001, now);
+      master.gain.exponentialRampToValueAtTime(type === "clear" ? 0.16 : 0.09, now + 0.015);
+      master.gain.exponentialRampToValueAtTime(0.0001, now + (type === "clear" ? 0.9 : 0.22));
+
+      if (type === "clear") {
+        [523.25, 659.25, 783.99, 1046.5].forEach((frequency, index) => {
+          const oscillator = audioContext.createOscillator();
+          const gain = audioContext.createGain();
+          oscillator.type = "sine";
+          oscillator.frequency.setValueAtTime(frequency, now + index * 0.13);
+          gain.gain.setValueAtTime(0.0001, now);
+          gain.gain.setValueAtTime(0.55, now + index * 0.13);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.13 + 0.24);
+          oscillator.connect(gain);
+          gain.connect(master);
+          oscillator.start(now + index * 0.13);
+          oscillator.stop(now + index * 0.13 + 0.26);
+        });
+      } else {
+        const oscillator = audioContext.createOscillator();
+        oscillator.connect(master);
+        if (type === "bomb") {
+          oscillator.type = "sawtooth";
+          oscillator.frequency.setValueAtTime(150, now);
+          oscillator.frequency.exponentialRampToValueAtTime(38, now + 0.2);
+        } else {
+          oscillator.type = "sine";
+          oscillator.frequency.setValueAtTime(660, now);
+          oscillator.frequency.exponentialRampToValueAtTime(440, now + 0.09);
+        }
+        oscillator.start(now);
+        oscillator.stop(now + 0.22);
+      }
+    } catch (error) {
+      // 効果音が使えない環境でもゲーム進行には影響させない。
+    }
   }
 
   function setMessage(message) {
@@ -332,8 +444,9 @@
     if (!game) return;
 
     const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-    const cssWidth = game.w * game.cell;
-    const cssHeight = game.h * game.cell;
+    const cellSize = game.cell * game.zoom;
+    const cssWidth = game.w * cellSize;
+    const cssHeight = game.h * cellSize;
 
     canvas.width = Math.round(cssWidth * dpr);
     canvas.height = Math.round(cssHeight * dpr);
@@ -345,9 +458,9 @@
 
     for (let y = 0; y < game.h; y++) {
       for (let x = 0; x < game.w; x++) {
-        const px = x * game.cell;
-        const py = y * game.cell;
-        const size = game.cell;
+        const px = x * cellSize;
+        const py = y * cellSize;
+        const size = cellSize;
         const opened = game.opened[y][x];
 
         ctx.fillStyle = opened ? COLORS.opened : COLORS.closed;
@@ -403,8 +516,8 @@
 
     // getBoundingClientRect() はCSSピクセルなので、DPR補正は不要。
     return {
-      x: Math.floor((event.clientX - rect.left) / game.cell),
-      y: Math.floor((event.clientY - rect.top) / game.cell)
+      x: Math.floor((event.clientX - rect.left) / (game.cell * game.zoom)),
+      y: Math.floor((event.clientY - rect.top) / (game.cell * game.zoom))
     };
   }
 
@@ -449,6 +562,18 @@
     button.addEventListener("click", () => createGame(button.dataset.difficulty));
   });
 
+  $("zoom-out-button").addEventListener("click", () => {
+    if (game) setZoom(game.zoom - ZOOM_STEP);
+  });
+
+  $("zoom-in-button").addEventListener("click", () => {
+    if (game) setZoom(game.zoom + ZOOM_STEP);
+  });
+
+  $("zoom-reset-button").addEventListener("click", () => {
+    if (game) setZoom(1);
+  });
+
   $("restart-button").addEventListener("click", () => {
     if (game) createGame(game.mode);
   });
@@ -465,6 +590,7 @@
   updateDifficultyInfo();
   switchTab("game");
   setActionMode("open");
+
   window.addEventListener("resize", () => {
     if (game) renderBoard();
   });
