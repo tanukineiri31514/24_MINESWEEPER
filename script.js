@@ -1,4 +1,3 @@
-
 (() => {
   "use strict";
 
@@ -22,6 +21,7 @@
   let currentTab = "game";
   let actionMode = "open";
   let audioContext = null;
+
   const MIN_ZOOM = 0.5;
   const MAX_ZOOM = 2;
   const ZOOM_STEP = 0.1;
@@ -107,6 +107,7 @@
     $("flag-count").textContent = "000";
     $("timer").textContent = "000";
     $("clear-overlay").classList.add("hidden");
+
     updateZoomControls();
 
     setMessage("最初のマスを選んでスタート！");
@@ -115,75 +116,110 @@
     stopTimer();
   }
 
-  function placeBombs(firstY, firstX) {
-    let placed = 0;
+  // 最初のクリック位置からランダムな順序でBFSを行い、
+  // 10〜15マスを連続した初期安全領域として選ぶ。
+  // このゲームの隣接範囲は周囲5×5（中央を除く）。
+  function createInitialSafeCells(firstY, firstX) {
+    const targetCount = 10 + Math.floor(Math.random() * 6);
 
-    while (placed < game.bombs) {
-      const y = Math.floor(Math.random() * game.h);
-      const x = Math.floor(Math.random() * game.w);
-
-      if ((y === firstY && x === firstX) || game.board[y][x] === -1) continue;
-
-      game.board[y][x] = -1;
-      placed++;
-    }
-
-    // 爆弾座標をキューに入れ、各爆弾の周囲24マスへ1ずつ加算する。
-    const queue = [];
-
-    for (let y = 0; y < game.h; y++) {
-      for (let x = 0; x < game.w; x++) {
-        if (game.board[y][x] === -1) queue.push([y, x]);
-      }
-    }
+    const queue = [[firstY, firstX]];
+    const visited = new Set([`${firstY},${firstX}`]);
+    const safeCells = [[firstY, firstX]];
 
     let head = 0;
 
-    while (head < queue.length) {
+    while (head < queue.length && visited.size < targetCount) {
       const [y, x] = queue[head++];
+      const neighbors = [];
 
+      // 現在のマスに隣接する未探索マスを集める。
+      // このゲームでは周囲5×5（中央を除く）が隣接範囲。
       for (let dy = -2; dy <= 2; dy++) {
         for (let dx = -2; dx <= 2; dx++) {
           if (dy === 0 && dx === 0) continue;
 
           const ny = y + dy;
           const nx = x + dx;
+          const key = `${ny},${nx}`;
 
-          if (ny < 0 || ny >= game.h || nx < 0 || nx >= game.w) continue;
-          if (game.board[ny][nx] === -1) continue;
-
-          game.board[ny][nx] += 1;
+          if (
+            inside(ny, nx) &&
+            !game.flags[ny][nx] &&
+            !visited.has(key)
+          ) {
+            neighbors.push([ny, nx, key]);
+          }
         }
       }
+
+      // 隣接候補の順番をランダム化する。
+      for (let i = neighbors.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [neighbors[i], neighbors[j]] = [neighbors[j], neighbors[i]];
+      }
+
+      // 訪問済みが目標数になった時点で追加を打ち切る。
+      // 追加するマスは必ず探索中のマスに隣接するため、
+      // safeCells全体はひと続きの領域になる。
+      for (const [ny, nx, key] of neighbors) {
+        if (visited.size >= targetCount) break;
+        if (visited.has(key)) continue;
+
+        visited.add(key);
+        safeCells.push([ny, nx]);
+        queue.push([ny, nx]);
+      }
     }
+
+    return safeCells;
   }
 
-  // 中級・上級は初手の運要素を減らすため、最初のクリック時に
-  // クリックしたマスを含む10〜15マスを安全な状態で先に開けておく。
-  function openInitialSafeCells(firstY, firstX) {
-    if (game.mode === "beginner") return;
+  // 初期安全領域には爆弾を置かず、その後に数字を計算する。
+  function placeBombs(safeCells) {
+    const safeSet = new Set(
+      safeCells.map(([y, x]) => `${y},${x}`)
+    );
 
-    const targetCount = 10 + Math.floor(Math.random() * 6);
     const candidates = [];
+
     for (let y = 0; y < game.h; y++) {
       for (let x = 0; x < game.w; x++) {
-        if ((y !== firstY || x !== firstX) && game.board[y][x] !== -1) {
+        if (!safeSet.has(`${y},${x}`)) {
           candidates.push([y, x]);
         }
       }
     }
 
-    // Fisher-Yatesで候補をシャッフルし、必要な数だけ開く。
+    // 爆弾の配置場所をシャッフルし、必要数だけ配置する。
     for (let i = candidates.length - 1; i > 0; i--) {
-      const k = Math.floor(Math.random() * (i + 1));
-      [candidates[i], candidates[k]] = [candidates[k], candidates[i]];
+      const j = Math.floor(Math.random() * (i + 1));
+      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
     }
 
-    // 最初にクリックした1マスは通常のreveal処理で開く。
-    for (let i = 0; i < targetCount - 1 && i < candidates.length; i++) {
+    for (let i = 0; i < game.bombs; i++) {
       const [y, x] = candidates[i];
-      game.opened[y][x] = true;
-      game.openedCount++;
+      game.board[y][x] = -1;
+    }
+
+    // 爆弾をすべて置いた後で、各マスの周囲24マスの爆弾数を数える。
+    for (let y = 0; y < game.h; y++) {
+      for (let x = 0; x < game.w; x++) {
+        if (game.board[y][x] !== -1) continue;
+
+        for (let dy = -2; dy <= 2; dy++) {
+          for (let dx = -2; dx <= 2; dx++) {
+            if (dy === 0 && dx === 0) continue;
+
+            const ny = y + dy;
+            const nx = x + dx;
+
+            if (!inside(ny, nx)) continue;
+            if (game.board[ny][nx] === -1) continue;
+
+            game.board[ny][nx]++;
+          }
+        }
+      }
     }
   }
 
@@ -192,11 +228,22 @@
   }
 
   function reveal(y, x) {
-    if (!inside(y, x) || game.over || game.opened[y][x] || game.flags[y][x]) return;
+    if (!inside(y, x) || game.over || game.opened[y][x] || game.flags[y][x]) {
+      return;
+    }
+
+    let initialSafeCells = null;
 
     if (!game.generated) {
-      placeBombs(y, x);
-      openInitialSafeCells(y, x);
+      // 先にランダムBFSで初期安全領域を決め、
+      // その領域を除外して爆弾を配置し、最後に数字を計算する。
+      initialSafeCells =
+        game.mode === "beginner"
+          ? [[y, x]]
+          : createInitialSafeCells(y, x);
+
+      placeBombs(initialSafeCells);
+
       game.generated = true;
       game.startedAt = Date.now();
       startTimer();
@@ -209,14 +256,23 @@
       return;
     }
 
-    // 0のマスから周囲24マスへ広げるBFS
-    const queue = [[y, x]];
+    // 初回はBFSで選んだ安全領域全体をキューに入れる。
+    // 2回目以降はクリックした1マスから通常どおり開く。
+    // 0のマスからは周囲24マスへ広げる。
+    const queue = initialSafeCells ?? [[y, x]];
     let head = 0;
 
     while (head < queue.length) {
       const [cy, cx] = queue[head++];
 
-      if (!inside(cy, cx) || game.opened[cy][cx] || game.flags[cy][cx]) continue;
+      if (
+        !inside(cy, cx) ||
+        game.opened[cy][cx] ||
+        game.flags[cy][cx]
+      ) {
+        continue;
+      }
+
       if (game.board[cy][cx] === -1) continue;
 
       game.opened[cy][cx] = true;
@@ -273,7 +329,9 @@
     if (!won) {
       for (let y = 0; y < game.h; y++) {
         for (let x = 0; x < game.w; x++) {
-          if (game.board[y][x] === -1) game.opened[y][x] = true;
+          if (game.board[y][x] === -1) {
+            game.opened[y][x] = true;
+          }
         }
       }
 
@@ -290,6 +348,7 @@
 
   function updateZoomControls() {
     if (!game) return;
+
     $("zoom-reset-button").textContent = `${Math.round(game.zoom * 100)}%`;
     $("zoom-out-button").disabled = game.zoom <= MIN_ZOOM;
     $("zoom-in-button").disabled = game.zoom >= MAX_ZOOM;
@@ -297,60 +356,124 @@
 
   function setZoom(nextZoom) {
     if (!game) return;
-    const oldCellSize = game.cell * game.zoom;
-    const relativeX = (viewport.scrollLeft + viewport.clientWidth / 2) / oldCellSize;
-    const relativeY = (viewport.scrollTop + viewport.clientHeight / 2) / oldCellSize;
 
-    game.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round(nextZoom * 10) / 10));
+    const oldCellSize = game.cell * game.zoom;
+
+    const relativeX =
+      (viewport.scrollLeft + viewport.clientWidth / 2) / oldCellSize;
+
+    const relativeY =
+      (viewport.scrollTop + viewport.clientHeight / 2) / oldCellSize;
+
+    game.zoom = Math.max(
+      MIN_ZOOM,
+      Math.min(MAX_ZOOM, Math.round(nextZoom * 10) / 10)
+    );
+
     renderBoard();
     updateZoomControls();
 
     const newCellSize = game.cell * game.zoom;
-    viewport.scrollLeft = Math.max(0, relativeX * newCellSize - viewport.clientWidth / 2);
-    viewport.scrollTop = Math.max(0, relativeY * newCellSize - viewport.clientHeight / 2);
+
+    viewport.scrollLeft = Math.max(
+      0,
+      relativeX * newCellSize - viewport.clientWidth / 2
+    );
+
+    viewport.scrollTop = Math.max(
+      0,
+      relativeY * newCellSize - viewport.clientHeight / 2
+    );
   }
 
   // 外部音源を使わずWeb Audio APIで短い効果音を生成する。
   function playSound(type) {
     try {
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      const AudioContextClass =
+        window.AudioContext || window.webkitAudioContext;
+
       if (!AudioContextClass) return;
-      if (!audioContext) audioContext = new AudioContextClass();
-      if (audioContext.state === "suspended") audioContext.resume();
+
+      if (!audioContext) {
+        audioContext = new AudioContextClass();
+      }
+
+      if (audioContext.state === "suspended") {
+        audioContext.resume();
+      }
 
       const now = audioContext.currentTime;
+
       const master = audioContext.createGain();
       master.connect(audioContext.destination);
+
       master.gain.setValueAtTime(0.0001, now);
-      master.gain.exponentialRampToValueAtTime(type === "clear" ? 0.16 : 0.09, now + 0.015);
-      master.gain.exponentialRampToValueAtTime(0.0001, now + (type === "clear" ? 0.9 : 0.22));
+
+      master.gain.exponentialRampToValueAtTime(
+        type === "clear" ? 0.16 : 0.09,
+        now + 0.015
+      );
+
+      master.gain.exponentialRampToValueAtTime(
+        0.0001,
+        now + (type === "clear" ? 0.9 : 0.22)
+      );
 
       if (type === "clear") {
+        // クリア時のファンファーレ。
         [523.25, 659.25, 783.99, 1046.5].forEach((frequency, index) => {
           const oscillator = audioContext.createOscillator();
           const gain = audioContext.createGain();
+
           oscillator.type = "sine";
-          oscillator.frequency.setValueAtTime(frequency, now + index * 0.13);
+          oscillator.frequency.setValueAtTime(
+            frequency,
+            now + index * 0.13
+          );
+
           gain.gain.setValueAtTime(0.0001, now);
-          gain.gain.setValueAtTime(0.55, now + index * 0.13);
-          gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.13 + 0.24);
+
+          gain.gain.setValueAtTime(
+            0.55,
+            now + index * 0.13
+          );
+
+          gain.gain.exponentialRampToValueAtTime(
+            0.0001,
+            now + index * 0.13 + 0.24
+          );
+
           oscillator.connect(gain);
           gain.connect(master);
+
           oscillator.start(now + index * 0.13);
           oscillator.stop(now + index * 0.13 + 0.26);
         });
       } else {
         const oscillator = audioContext.createOscillator();
+
         oscillator.connect(master);
+
         if (type === "bomb") {
+          // 爆弾を踏んだときの低い音。
           oscillator.type = "sawtooth";
           oscillator.frequency.setValueAtTime(150, now);
-          oscillator.frequency.exponentialRampToValueAtTime(38, now + 0.2);
+
+          oscillator.frequency.exponentialRampToValueAtTime(
+            38,
+            now + 0.2
+          );
         } else {
+          // マスを開いたときの短い音。
           oscillator.type = "sine";
           oscillator.frequency.setValueAtTime(660, now);
-          oscillator.frequency.exponentialRampToValueAtTime(440, now + 0.09);
+
+          oscillator.frequency.exponentialRampToValueAtTime(
+            440,
+            now + 0.09
+          );
         }
+
         oscillator.start(now);
         oscillator.stop(now + 0.22);
       }
@@ -383,6 +506,7 @@
     if (!game || game.startedAt === null) return 0;
 
     const end = game.endedAt ?? Date.now();
+
     return Math.floor((end - game.startedAt) / 1000);
   }
 
@@ -392,14 +516,24 @@
   }
 
   function stopTimer() {
-    if (timerId !== null) window.clearInterval(timerId);
+    if (timerId !== null) {
+      window.clearInterval(timerId);
+    }
+
     timerId = null;
   }
 
   function drawBomb(x, y, size) {
     ctx.fillStyle = COLORS.bomb;
+
     ctx.beginPath();
-    ctx.arc(x + size / 2, y + size / 2, size * 0.25, 0, Math.PI * 2);
+    ctx.arc(
+      x + size / 2,
+      y + size / 2,
+      size * 0.25,
+      0,
+      Math.PI * 2
+    );
     ctx.fill();
 
     ctx.strokeStyle = "#9d3038";
@@ -410,20 +544,24 @@
       const a = i * Math.PI / 2;
 
       ctx.beginPath();
+
       ctx.moveTo(
         x + size / 2 + Math.cos(a) * size * 0.27,
         y + size / 2 + Math.sin(a) * size * 0.27
       );
+
       ctx.lineTo(
         x + size / 2 + Math.cos(a) * size * 0.36,
         y + size / 2 + Math.sin(a) * size * 0.36
       );
+
       ctx.stroke();
     }
   }
 
   function drawFlag(x, y, size) {
     ctx.fillStyle = COLORS.flag;
+
     ctx.beginPath();
     ctx.moveTo(x + size * 0.30, y + size * 0.20);
     ctx.lineTo(x + size * 0.72, y + size * 0.36);
@@ -433,6 +571,7 @@
 
     ctx.strokeStyle = "#f8b1a8";
     ctx.lineWidth = Math.max(1, size * 0.045);
+
     ctx.beginPath();
     ctx.moveTo(x + size * 0.29, y + size * 0.18);
     ctx.lineTo(x + size * 0.29, y + size * 0.78);
@@ -443,13 +582,18 @@
   function renderBoard() {
     if (!game) return;
 
-    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    const dpr = Math.max(
+      1,
+      Math.min(2, window.devicePixelRatio || 1)
+    );
+
     const cellSize = game.cell * game.zoom;
     const cssWidth = game.w * cellSize;
     const cssHeight = game.h * cellSize;
 
     canvas.width = Math.round(cssWidth * dpr);
     canvas.height = Math.round(cssHeight * dpr);
+
     canvas.style.width = `${cssWidth}px`;
     canvas.style.height = `${cssHeight}px`;
 
@@ -468,9 +612,16 @@
 
         if (!opened) {
           ctx.fillStyle = COLORS.closedLight;
-          ctx.fillRect(px + 1, py + 1, size - 2, Math.max(2, size * 0.07));
+
+          ctx.fillRect(
+            px + 1,
+            py + 1,
+            size - 2,
+            Math.max(2, size * 0.07)
+          );
 
           ctx.fillStyle = COLORS.closedDark;
+
           ctx.fillRect(
             px + 1,
             py + size - Math.max(3, size * 0.07),
@@ -483,6 +634,7 @@
           drawBomb(px, py, size);
         } else if (opened && game.board[y][x] > 0) {
           const value = game.board[y][x];
+
           const numberColors = [
             "",
             "#2464d8",
@@ -496,17 +648,31 @@
           ];
 
           ctx.fillStyle = numberColors[value] || "#182333";
-          ctx.font = `700 ${Math.max(10, Math.floor(size * 0.48))}px "Noto Sans JP", sans-serif`;
+
+          ctx.font =
+            `700 ${Math.max(10, Math.floor(size * 0.48))}px "Noto Sans JP", sans-serif`;
+
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          ctx.fillText(String(value), px + size / 2, py + size / 2 + 1);
+
+          ctx.fillText(
+            String(value),
+            px + size / 2,
+            py + size / 2 + 1
+          );
         } else if (!opened && game.flags[y][x]) {
           drawFlag(px, py, size);
         }
 
         ctx.strokeStyle = opened ? COLORS.openedEdge : COLORS.grid;
         ctx.lineWidth = Math.max(1, size >= 30 ? 1.5 : 1);
-        ctx.strokeRect(px + 0.5, py + 0.5, size - 1, size - 1);
+
+        ctx.strokeRect(
+          px + 0.5,
+          py + 0.5,
+          size - 1,
+          size - 1
+        );
       }
     }
   }
@@ -516,8 +682,12 @@
 
     // getBoundingClientRect() はCSSピクセルなので、DPR補正は不要。
     return {
-      x: Math.floor((event.clientX - rect.left) / (game.cell * game.zoom)),
-      y: Math.floor((event.clientY - rect.top) / (game.cell * game.zoom))
+      x: Math.floor(
+        (event.clientX - rect.left) / (game.cell * game.zoom)
+      ),
+      y: Math.floor(
+        (event.clientY - rect.top) / (game.cell * game.zoom)
+      )
     };
   }
 
@@ -535,19 +705,21 @@
     }
   }
 
-  // 左クリック・タップ：選択中のモードで操作
+  // 左クリック・タップ：選択中のモードで操作。
   canvas.addEventListener("click", (event) => {
     if (event.button !== 0) return;
+
     handleCell(event, actionMode === "flag");
   });
 
-  // PCの右クリック：旗を立てる・外す
+  // PCの右クリック：旗を立てる・外す。
   canvas.addEventListener("contextmenu", (event) => {
     event.preventDefault();
+
     handleCell(event, true);
   });
 
-  // 操作モード切り替えボタン
+  // 操作モード切り替えボタン。
   document.querySelectorAll("[data-action-mode]").forEach((button) => {
     button.addEventListener("click", () => {
       setActionMode(button.dataset.actionMode);
@@ -555,51 +727,73 @@
   });
 
   document.querySelectorAll("[data-tab]").forEach((button) => {
-    button.addEventListener("click", () => switchTab(button.dataset.tab));
+    button.addEventListener("click", () => {
+      switchTab(button.dataset.tab);
+    });
   });
 
   document.querySelectorAll("[data-difficulty]").forEach((button) => {
-    button.addEventListener("click", () => createGame(button.dataset.difficulty));
+    button.addEventListener("click", () => {
+      createGame(button.dataset.difficulty);
+    });
   });
 
   $("zoom-out-button").addEventListener("click", () => {
-    if (game) setZoom(game.zoom - ZOOM_STEP);
+    if (game) {
+      setZoom(game.zoom - ZOOM_STEP);
+    }
   });
 
   $("zoom-in-button").addEventListener("click", () => {
-    if (game) setZoom(game.zoom + ZOOM_STEP);
+    if (game) {
+      setZoom(game.zoom + ZOOM_STEP);
+    }
   });
 
   $("zoom-reset-button").addEventListener("click", () => {
-    if (game) setZoom(1);
+    if (game) {
+      setZoom(1);
+    }
   });
 
   $("restart-button").addEventListener("click", () => {
-    if (game) createGame(game.mode);
+    if (game) {
+      createGame(game.mode);
+    }
   });
 
   $("menu-button").addEventListener("click", () => {
     stopTimer();
     game = null;
+
     switchTab("game");
   });
 
-  $("help-button").addEventListener("click", () => $("help-dialog").showModal());
+  $("help-button").addEventListener("click", () => {
+    $("help-dialog").showModal();
+  });
 
-  // 初期表示時に難易度情報を反映
+  // 初期表示時に難易度情報を反映。
   updateDifficultyInfo();
   switchTab("game");
   setActionMode("open");
 
   window.addEventListener("resize", () => {
-    if (game) renderBoard();
+    if (game) {
+      renderBoard();
+    }
   });
 
-  // キーボード操作：Rでリスタート、Escapeで難易度選択へ
+  // キーボード操作：Rでリスタート、Escapeで難易度選択へ。
   window.addEventListener("keydown", (event) => {
     if (!game || $("help-dialog").open) return;
 
-    if (event.key.toLowerCase() === "r") createGame(game.mode);
-    if (event.key === "Escape") $("menu-button").click();
+    if (event.key.toLowerCase() === "r") {
+      createGame(game.mode);
+    }
+
+    if (event.key === "Escape") {
+      $("menu-button").click();
+    }
   });
 })();
