@@ -8,6 +8,7 @@
   <title>24 MINESWEEPER</title>
   <link rel="stylesheet" href="./style.css">
 </head>
+
 <body>
   <main class="app">
     <header class="topbar">
@@ -105,9 +106,25 @@
         </span>
       </div>
 
-      <div id="board-viewport" class="board-viewport">
-        <div id="board-stage" class="board-stage">
-          <canvas id="board" aria-label="マインスイーパー盤面"></canvas>
+      <div class="zoom-controls" role="group" aria-label="盤面の拡大縮小">
+        <span class="zoom-label">表示倍率</span>
+        <button id="zoom-out-button" class="zoom-button" type="button" aria-label="縮小">−</button>
+        <button id="zoom-reset-button" class="zoom-button zoom-value" type="button" aria-label="倍率を100%に戻す">100%</button>
+        <button id="zoom-in-button" class="zoom-button" type="button" aria-label="拡大">＋</button>
+      </div>
+
+      <div class="board-area">
+        <div id="board-viewport" class="board-viewport">
+          <div id="board-stage" class="board-stage">
+            <canvas id="board" aria-label="マインスイーパー盤面"></canvas>
+          </div>
+        </div>
+        <div id="clear-overlay" class="clear-overlay hidden" aria-live="assertive">
+          <div class="clear-message">
+            <span class="clear-sparkle">★　★　★</span>
+            <strong>クリア！<br>おめでとう！！</strong>
+            <span class="clear-subtitle">すべてのマスを開きました</span>
+          </div>
         </div>
       </div>
 
