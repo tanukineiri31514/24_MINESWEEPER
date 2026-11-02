@@ -94,3 +94,16 @@ footer span { color: var(--accent); }
   .topbar { align-items: flex-start; margin-bottom: 18px; }
   .subtitle { max-width: 230px; font-size: 11px; }
   .top-actions { gap: 6px; }
+/* 盤面のマスサイズを固定 */
+#board {
+    display: block;
+    max-width: none !important;
+    max-height: none !important;
+    flex-shrink: 0;
+}
+
+/* 盤面が画面からはみ出す場合はスクロール */
+#board-viewport {
+    overflow: auto;
+    max-width: 100%;
+}
