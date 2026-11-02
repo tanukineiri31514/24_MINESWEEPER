@@ -7,7 +7,6 @@
     intermediate: { name: "中級", h: 16, w: 30, bombs: 35, cell: 30 },
     advanced: { name: "上級", h: 40, w: 60, bombs: 200, cell: 25 }
   };
-
   const $ = (id) => document.getElementById(id);
   const menuScreen = $("menu-screen");
   const gameScreen = $("game-screen");
