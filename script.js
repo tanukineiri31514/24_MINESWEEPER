@@ -5,7 +5,7 @@
   const DIFFICULTIES = {
     beginner: { name: "初級", h: 10, w: 10, bombs: 7, cell: 50 },
     intermediate: { name: "中級", h: 16, w: 30, bombs: 35, cell: 30 },
-    advanced: { name: "上級", h: 40, w: 60, bombs: 200, cell: 25 }
+    advanced: { name: "上級", h: 40, w: 60, bombs: 250, cell: 25 }
   };
 
   const $ = (id) => document.getElementById(id);
@@ -34,6 +34,7 @@
     grid: "#596579",
     bomb: "#df5353",
     flag: "#f06b69",
+    question: "#ffe38a",
     text: "#172334"
   };
 
@@ -73,10 +74,12 @@
       button.setAttribute("aria-pressed", String(selected));
     });
 
-    $("action-mode-hint").textContent =
-      mode === "flag"
-        ? "マスをタップすると旗を立てる・外します"
-        : "マスをタップすると開きます";
+    const hints = {
+      open: "マスをタップすると開きます（？マークも開けられます）",
+      flag: "マスをタップすると旗を立てる・外します",
+      question: "マスをタップすると？マークを仮置き・解除します"
+    };
+    $("action-mode-hint").textContent = hints[mode];
   }
 
   function createGame(mode) {
@@ -87,6 +90,7 @@
       board: Array.from({ length: cfg.h }, () => Array(cfg.w).fill(0)),
       opened: Array.from({ length: cfg.h }, () => Array(cfg.w).fill(false)),
       flags: Array.from({ length: cfg.h }, () => Array(cfg.w).fill(false)),
+      questions: Array.from({ length: cfg.h }, () => Array(cfg.w).fill(false)),
       generated: false,
       over: false,
       won: false,
@@ -246,6 +250,7 @@
     }
 
     if (game.board[y][x] === -1) {
+      game.questions[y][x] = false;
       game.opened[y][x] = true;
       playSound("bomb");
       finishGame(false);
@@ -264,6 +269,8 @@
       if (game.opened[cy][cx] || game.flags[cy][cx]) continue;
       if (game.board[cy][cx] === -1) continue;
 
+      // 「？」は目印なので、開いたら自動で解除する。
+      game.questions[cy][cx] = false;
       game.opened[cy][cx] = true;
       game.openedCount++;
 
@@ -304,7 +311,20 @@
   function toggleFlag(y, x) {
     if (!inside(y, x) || game.over || game.opened[y][x]) return;
 
+    // 旗と「？」は同時に存在しない。旗を立てたら「？」を消す。
     game.flags[y][x] = !game.flags[y][x];
+    if (game.flags[y][x]) game.questions[y][x] = false;
+
+    renderBoard();
+    updateHud();
+  }
+
+  function toggleQuestion(y, x) {
+    if (!inside(y, x) || game.over || game.opened[y][x]) return;
+
+    // 「？」は爆弾確定ではなく仮置き。旗から直接切り替えられる。
+    game.questions[y][x] = !game.questions[y][x];
+    if (game.questions[y][x]) game.flags[y][x] = false;
 
     renderBoard();
     updateHud();
@@ -487,6 +507,17 @@
     ctx.stroke();
   }
 
+  function drawQuestion(x, y, size) {
+    ctx.font = `800 ${Math.max(12, Math.floor(size * 0.72))}px "Barlow Condensed", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineWidth = Math.max(2, size * 0.09);
+    ctx.strokeStyle = "#4b586b";
+    ctx.strokeText("?", x + size / 2, y + size / 2 + size * 0.035);
+    ctx.fillStyle = COLORS.question;
+    ctx.fillText("?", x + size / 2, y + size / 2 + size * 0.035);
+  }
+
   function renderBoard() {
     if (!game) return;
 
@@ -549,6 +580,8 @@
           ctx.fillText(String(value), px + size / 2, py + size / 2 + 1);
         } else if (!opened && game.flags[y][x]) {
           drawFlag(px, py, size);
+        } else if (!opened && game.questions[y][x]) {
+          drawQuestion(px, py, size);
         }
 
         ctx.strokeStyle = opened ? COLORS.openedEdge : COLORS.grid;
@@ -568,15 +601,16 @@
     };
   }
 
-  function handleCell(event, flagMode = false) {
+  function handleCell(event, mode) {
     if (!game || game.over) return;
 
     const { x, y } = canvasCellFromEvent(event);
-
     if (!inside(y, x)) return;
 
-    if (flagMode) {
+    if (mode === "flag") {
       toggleFlag(y, x);
+    } else if (mode === "question") {
+      toggleQuestion(y, x);
     } else {
       reveal(y, x);
     }
@@ -585,13 +619,13 @@
   // 左クリック・タップ：選択中のモードで操作
   canvas.addEventListener("click", (event) => {
     if (event.button !== 0) return;
-    handleCell(event, actionMode === "flag");
+    handleCell(event, actionMode);
   });
 
-  // PCの右クリック：旗を立てる・外す
+  // PCの右クリック：旗。Shift + 右クリック：「？」を仮置き。
   canvas.addEventListener("contextmenu", (event) => {
     event.preventDefault();
-    handleCell(event, true);
+    handleCell(event, event.shiftKey ? "question" : "flag");
   });
 
   // 操作モード切り替えボタン
