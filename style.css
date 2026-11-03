@@ -474,3 +474,12 @@ footer span {
 #clear-overlay { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 24px; background: rgba(5, 12, 24, .58); pointer-events: none; }
 #clear-overlay.hidden { display: none !important; }
 #clear-overlay .clear-message { padding: 32px 40px; border: 2px solid #66d9c3; border-radius: 20px; background: #151f31; color: #edf3fb; font-size: clamp(28px, 6vw, 64px); font-weight: 800; text-align: center; box-shadow: 0 24px 70px rgba(0, 0, 0, .45); }
+
+/* クリア表示中も背景のボタンを押せる。クリックで演出は消える。 */
+#clear-overlay .clear-dismiss-hint {
+  margin: 12px 0 0;
+  color: #b9cadb;
+  font-size: clamp(12px, 2vw, 15px);
+  font-weight: 500;
+  letter-spacing: normal;
+}
