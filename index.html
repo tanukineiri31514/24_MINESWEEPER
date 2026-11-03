@@ -57,7 +57,7 @@
 
       <div class="rule-strip">
         <span>操作モードを切り替えてマスを操作</span>
-        <span>PCは右クリックでも旗を操作可能</span>
+        <span>PCは右クリックで旗、Shift＋右クリックで？を操作可能</span>
         <span>最初のクリックは安全</span>
       </div>
     </section>
@@ -101,6 +101,10 @@
           ⚑ 旗を立てる
         </button>
 
+        <button id="question-mode-button" class="mode-button" data-action-mode="question" type="button" aria-pressed="false">
+          ？ 仮置き
+        </button>
+
         <span id="action-mode-hint" class="action-mode-hint">
           マスをタップすると開きます
         </span>
@@ -141,8 +145,10 @@
       <h3>操作方法</h3>
       <ul>
         <li>「開く」モード：マスをタップすると開きます。</li>
-        <li>「旗を立てる」モード：マスをタップすると旗を立てる・外します。</li>
-        <li>PCでは右クリックでも旗を立てる・外せます。</li>
+        <li>「旗を立てる」モード：爆弾があると確信したマスに旗を立てる・外します。</li>
+        <li>「？ 仮置き」モード：爆弾かもしれないマスに？を付ける・外します。</li>
+        <li>旗と？は同時に置けず、切り替えできます。？のマスは開くことができます。</li>
+        <li>PCでは右クリックで旗、Shift＋右クリックで？を操作できます。</li>
         <li>Rキー：リスタート</li>
         <li>Escキー：難易度選択に戻る</li>
       </ul>
