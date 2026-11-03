@@ -15,9 +15,11 @@
   const canvas = $("board");
   const ctx = canvas.getContext("2d");
   const viewport = $("board-viewport");
+  const clearOverlay = $("clear-overlay");
 
   let game = null;
   let timerId = null;
+  let clearOverlayTimerId = null;
   let currentTab = "game";
   let actionMode = "open";
   let audioContext = null;
@@ -51,7 +53,24 @@
     }
   }
 
+  // クリア演出はクリック・タップまたは5秒後に閉じる。
+  // 遷移・リスタート時も必ずタイマーを解除して非表示に戻す。
+  function hideClearOverlay() {
+    if (clearOverlayTimerId !== null) {
+      window.clearTimeout(clearOverlayTimerId);
+      clearOverlayTimerId = null;
+    }
+    clearOverlay.classList.add("hidden");
+  }
+
+  function showClearOverlay() {
+    hideClearOverlay();
+    clearOverlay.classList.remove("hidden");
+    clearOverlayTimerId = window.setTimeout(hideClearOverlay, 5000);
+  }
+
   function switchTab(tab) {
+    if (tab !== "game") hideClearOverlay();
     currentTab = tab;
 
     document.querySelectorAll("[data-tab]").forEach((button) => {
@@ -83,6 +102,7 @@
   }
 
   function createGame(mode) {
+    hideClearOverlay();
     const cfg = DIFFICULTIES[mode];
 
     game = {
@@ -109,7 +129,6 @@
     $("bomb-count").textContent = String(cfg.bombs).padStart(3, "0");
     $("flag-count").textContent = "000";
     $("timer").textContent = "000";
-    $("clear-overlay").classList.add("hidden");
     updateZoomControls();
 
     setMessage("最初のマスを選んでスタート！");
@@ -347,7 +366,7 @@
       setMessage("ゲームオーバー — もう一度挑戦しよう");
     } else {
       setMessage("クリア！おめでとう！！");
-      $("clear-overlay").classList.remove("hidden");
+      showClearOverlay();
       playSound("clear");
     }
 
@@ -616,6 +635,13 @@
     }
   }
 
+  // キャプチャ段階で判定するため、クリアを発生させたクリックでは
+  // 演出が消えず、その次のクリック・タップで閉じられる。
+  // overlay自体はクリックを透過させるので、メニューへの移動も妨げない。
+  document.addEventListener("click", () => {
+    if (!clearOverlay.classList.contains("hidden")) hideClearOverlay();
+  }, true);
+
   // 左クリック・タップ：選択中のモードで操作
   canvas.addEventListener("click", (event) => {
     if (event.button !== 0) return;
@@ -660,6 +686,7 @@
   });
 
   $("menu-button").addEventListener("click", () => {
+    hideClearOverlay();
     stopTimer();
     game = null;
     switchTab("game");
