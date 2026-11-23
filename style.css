@@ -483,3 +483,31 @@ footer span {
   font-weight: 500;
   letter-spacing: normal;
 }
+
+
+/* ゲーム選択画面への戻りリンク（24 / POLY 共通） */
+.top-actions .collection-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.top-actions .collection-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+@media (max-width: 700px) {
+  .topbar { flex-wrap: wrap; gap: 10px; }
+  .top-actions { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+  .top-actions .collection-link { padding: 10px 12px; }
+}
+
+/* 4段階の難易度表示 */
+.difficulty-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 700px) {
+  .difficulty-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .difficulty-card { min-height: 145px; padding: 14px 7px; }
+  .difficulty-card strong { font-size: clamp(21px, 6vw, 29px); }
+  .difficulty-card>span:not(.difficulty-name) { font-size: 12px; }
+}
